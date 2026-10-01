@@ -34,7 +34,11 @@ RPCs).
   `ListSchedulers` (optionally filtered by task ID — the 1.3.0-only filter main reserves). No
   Application/SkillExecution surface at all on this branch.
 - `remotecontrol/` — unchanged from `main`; `RemoteControlService`'s command-gateway surface is
-  identical at both contract versions.
+  identical at both contract versions. One addition: `GoToWithOptions(ctx, sn, coordinate,
+  GoToOptions{NoFlyZoneOverride: true})` flies through a no-fly zone that would refuse the fly-to
+  (honoured for an organization admin or a system admin only); `GoTo` is that with no options. The
+  field (`CoordinateCommandRequest.no_fly_zone_override`, zqnt-protos 4115f03) is newer than the
+  1.3.0 `gen/`, so it is written as a raw wire field until `gen/` moves to the 2.0 line.
 - `livedata/` — unchanged from `main`; returns the raw gRPC server-streaming client rather than a
   typed dataclass, so it never needed touching for the `TaskEvent`/`CommandExecutionEvent`
   drift that affected the Python SDKs' equivalent layer.
@@ -44,6 +48,59 @@ RPCs).
   the raw `grpc.ServerStreamingClient` — redialing on a broken stream is the caller's job.
 - A shared proto module: `gen/` is vendored directly into this repo rather than pulled from one
   common `zqnt-utils-go`.
+
+## Authentication
+
+The platform refuses every call that carries no credential. An organization administrator issues a
+**client credential** in the console under **Deploy → Access & Integrations → Credentials** (kind
+**client**). It is shown once, belongs to that one organization, and reaches only that
+organization's assets, Applications and runs — never users, organizations or other administration.
+
+The clients here wrap a connection you dial, so the credential is a set of dial options:
+
+```go
+opts := append(auth.DialOptions(""), // "" reads ZQNT_CLIENT_TOKEN; or pass the token itself
+	grpc.WithTransportCredentials(insecure.NewCredentials()))
+conn, err := grpc.NewClient("core.example.com:8010", opts...)
+assets := connector.New(conn)
+```
+
+It is sent as `authorization: Bearer <token>` on every call, unary and streaming. A refusal keeps its
+gRPC code (`status.Code(err)`) with a message that says what to do: `Unauthenticated` (no credential,
+or an expired/revoked one) or `PermissionDenied` (an asset of another organization, or an
+administrative call). `auth.Credentials` is the same token as a `grpc.WithPerRPCCredentials` value
+for code that prefers that (wrap its errors with `auth.Explain`).
+
+### Local development and deployment: `config`
+
+`config.FromEnv()` reads the variables every Zequent client SDK (Java, Python, Go) reads, so one
+`.env` works for every language; nothing set is the local development stack (`quarkus:dev` or
+`docker-compose.local.yml`):
+
+| Variable | Local default (nothing set) |
+|---|---|
+| `CONNECTOR_SERVICE_HOST` / `_PORT` / `_USE_PLAINTEXT` | `localhost` / `8010` / `true` |
+| `REMOTE_CONTROL_SERVICE_HOST` / `_PORT` / `_USE_PLAINTEXT` | `localhost` / `8002` / `true` |
+| `LIVE_DATA_SERVICE_HOST` / `_PORT` / `_USE_PLAINTEXT` | `localhost` / `8003` / `true` |
+| `MISSION_AUTONOMY_SERVICE_HOST` / `_PORT` / `_USE_PLAINTEXT` | `localhost` / `8004` / `true` |
+| `ZQNT_CLIENT_TOKEN` | none — issue one in your local console too |
+
+```go
+cfg, err := config.FromEnv()
+conn, err := cfg.Dial(cfg.Connector) // TLS unless _USE_PLAINTEXT, plus the client credential
+assets := connector.New(conn)
+```
+
+A deployment sets the hosts, `_USE_PLAINTEXT=false` for TLS whenever traffic leaves a private
+network, and `ZQNT_CLIENT_TOKEN` from its secret store — never from a committed file. There is
+deliberately no built-in development credential. Printing a `config.Config` never prints the token.
+
+### A credential that is not one fixed token
+
+A service that forwards its own caller's token sets it per call — `auth.WithToken(ctx, token)` — or
+registers its own interceptors ahead of the SDK's (`cfg.Dial(endpoint, grpc.WithChainUnaryInterceptor(...))`,
+or before `auth.DialOptions` when dialing yourself; grpc-go runs chained interceptors in the order
+given). An `authorization` header already on the call wins and the connection's token is then not sent.
 
 ## Requirements
 
