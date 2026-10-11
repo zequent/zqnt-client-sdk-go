@@ -2,6 +2,9 @@
 // for manual flight control, dock operations, and asset/payload runtime discovery. It shares its
 // command contracts with EdgeAdapterService (device-control-contracts.proto), so the same request
 // and response shapes flow end to end from a customer app through to the edge adapter.
+//
+// Deprecated: the typed 2.x commands, for platforms on 2.x only. On 3.x use package control:
+// ListCapabilities and ExecuteCommand with a command id (flight.takeoff, navigation.go_to, ...).
 package remotecontrol
 
 import (
@@ -9,9 +12,9 @@ import (
 	"fmt"
 	"time"
 
-	base "github.com/Zequent/zqnt-client-sdk-go/v2/gen/common/base/proto"
-	devicecontrol "github.com/Zequent/zqnt-client-sdk-go/v2/gen/devicecontrol/contracts/proto"
-	remotecontrolpb "github.com/Zequent/zqnt-client-sdk-go/v2/gen/remotecontrol/proto"
+	base "github.com/zequent/zqnt-api-go/v3/gen/common/base/proto"
+	devicecontrol "github.com/zequent/zqnt-api-go/v3/gen/devicecontrol/contracts/proto"
+	remotecontrolpb "github.com/zequent/zqnt-api-go/v3/gen/remotecontrol/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"

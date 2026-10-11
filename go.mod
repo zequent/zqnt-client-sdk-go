@@ -1,8 +1,9 @@
-module github.com/Zequent/zqnt-client-sdk-go/v2
+module github.com/zequent/zqnt-client-sdk-go/v3
 
 go 1.26.2
 
 require (
+	github.com/zequent/zqnt-api-go/v3 v3.0.0-20261011120454-dd071db20c05
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
